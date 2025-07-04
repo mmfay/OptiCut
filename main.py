@@ -67,25 +67,25 @@ class WireOptimizerApp:
         self.optimized_result = []  # ✅ Stores the result for exporting
 
         # Create top buttons for user actions
-        tk.Button(root, text="Load Reels CSV", command=self.load_reels).grid(row=0, column=0, padx=5, pady=5)
-        tk.Button(root, text="Load Cuts CSV", command=self.load_cuts).grid(row=0, column=1, padx=5, pady=5)
-        tk.Button(root, text="Optimize Cuts", command=self.optimize).grid(row=0, column=2, padx=5, pady=5)
-        tk.Button(root, text="Export Assignments to CSV", command=self.export_assignments).grid(row=0, column=3, padx=5, pady=5)
+        tk.Button(root, text="Load Reels CSV", command=self.load_reels).grid(row=1, column=0, padx=5, pady=5)
+        tk.Button(root, text="Load Cuts CSV", command=self.load_cuts).grid(row=1, column=1, padx=5, pady=5)
+        tk.Button(root, text="Optimize Cuts", command=self.optimize).grid(row=1, column=2, padx=5, pady=5)
+        tk.Button(root, text="Export Assignments to CSV", command=self.export_assignments).grid(row=0, column=1, padx=5, pady=5)
 
         # Add column labels above output areas
-        tk.Label(root, text="Reels").grid(row=1, column=0)
-        tk.Label(root, text="Cuts").grid(row=1, column=1)
-        tk.Label(root, text="Assignments").grid(row=1, column=2)
+        tk.Label(root, text="Reels").grid(row=2, column=0)
+        tk.Label(root, text="Cuts").grid(row=2, column=1)
+        tk.Label(root, text="Assignments").grid(row=2, column=2)
 
         # Create 3 side-by-side Text widgets for output display
         self.reels_output = tk.Text(root, width=40, height=25)
-        self.reels_output.grid(row=2, column=0, padx=5, pady=5)
+        self.reels_output.grid(row=3, column=0, padx=5, pady=5)
 
         self.cuts_output = tk.Text(root, width=40, height=25)
-        self.cuts_output.grid(row=2, column=1, padx=5, pady=5)
+        self.cuts_output.grid(row=3, column=1, padx=5, pady=5)
 
         self.assign_output = tk.Text(root, width=60, height=25)
-        self.assign_output.grid(row=2, column=2, padx=5, pady=5)
+        self.assign_output.grid(row=3, column=2, padx=5, pady=5)
 
     # ------------------------
     # LOAD REELS CSV
