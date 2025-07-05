@@ -1,40 +1,32 @@
+
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 import pandas as pd
 from collections import defaultdict
-import csv  # ✅ Needed for export functionality
+import csv
 
 # ----------------------------
 # FUNCTION: allocate_cuts_by_item_number
 # ----------------------------
-# This function performs the core logic.
-# It matches wire cuts to wire reels, grouped by item_number.
-# Each cut must be placed on a reel of the same item_number,
-# and each reel has limited remaining length.
 def allocate_cuts_by_item_number(reels, cuts):
-    reels_by_item = defaultdict(list)  # Group reels by item_number
-
-    # Prepare reel state: add remaining length and empty list of cuts
+    reels_by_item = defaultdict(list)
     for r in reels:
         r["remaining"] = r["length"]
         r["cuts"] = []
         reels_by_item[r["item_number"]].append(r)
 
-    # Group cuts by item_number
     cuts_by_item = defaultdict(list)
     for c in cuts:
         cuts_by_item[c["item_number"]].append(c["length"])
 
-    all_results = []      # All updated reels (with cuts assigned)
-    all_unassigned = []   # Cuts that couldn't be assigned to a reel
+    all_results = []
+    all_unassigned = []
 
-    # Go through each item group independently
     for item_number, item_cuts in cuts_by_item.items():
-        sorted_cuts = sorted(item_cuts, reverse=True)  # Greedy: largest cuts first
+        sorted_cuts = sorted(item_cuts, reverse=True)
         item_reels = reels_by_item.get(item_number, [])
         unassigned = []
 
-        # Try placing each cut into the first reel with enough space
         for cut in sorted_cuts:
             placed = False
             for reel in item_reels:
@@ -44,52 +36,64 @@ def allocate_cuts_by_item_number(reels, cuts):
                     placed = True
                     break
             if not placed:
-                unassigned.append((cut, item_number))  # Track unassigned cuts
+                unassigned.append((cut, item_number))
 
-        all_results.extend(item_reels)        # Add updated reels to result list
-        all_unassigned.extend(unassigned)     # Add leftover cuts
+        all_results.extend(item_reels)
+        all_unassigned.extend(unassigned)
 
     return all_results, all_unassigned
-
 
 # ----------------------------
 # CLASS: WireOptimizerApp
 # ----------------------------
-# Main application class for the wire optimization GUI.
-# Handles UI creation, file loading, and result display.
 class WireOptimizerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Wire Reel Cut Optimizer")
 
-        self.reels = []  # Holds reel data after loading CSV
-        self.cuts = []   # Holds cut data after loading CSV
-        self.optimized_result = []  # ✅ Stores the result for exporting
+        self.reels = []
+        self.cuts = []
+        self.optimized_result = []
+        self.leftovers = []
 
-        # Create top buttons for user actions
+        # Buttons
         tk.Button(root, text="Load Reels CSV", command=self.load_reels).grid(row=1, column=0, padx=5, pady=5)
         tk.Button(root, text="Load Cuts CSV", command=self.load_cuts).grid(row=1, column=1, padx=5, pady=5)
         tk.Button(root, text="Optimize Cuts", command=self.optimize).grid(row=1, column=2, padx=5, pady=5)
         tk.Button(root, text="Export Assignments to CSV", command=self.export_assignments).grid(row=0, column=1, padx=5, pady=5)
 
-        # Add column labels above output areas
+        # Labels
         tk.Label(root, text="Reels").grid(row=2, column=0)
         tk.Label(root, text="Cuts").grid(row=2, column=1)
         tk.Label(root, text="Assignments").grid(row=2, column=2)
 
-        # Create 3 side-by-side Text widgets for output display
-        self.reels_output = tk.Text(root, width=40, height=25)
-        self.reels_output.grid(row=3, column=0, padx=5, pady=5)
+        # Reels Treeview
+        self.reels_tree = self.create_treeview(root, ("Serial", "Item Number", "Length"), 25, 3, 0)
 
-        self.cuts_output = tk.Text(root, width=40, height=25)
-        self.cuts_output.grid(row=3, column=1, padx=5, pady=5)
+        # Cuts Treeview
+        self.cuts_tree = self.create_treeview(root, ("Item Number", "Length"), 25, 3, 1)
 
-        self.assign_output = tk.Text(root, width=60, height=25)
-        self.assign_output.grid(row=3, column=2, padx=5, pady=5)
+        # Assignments Treeview
+        self.assignments_tree = self.create_treeview(root, ("Serial", "Item Number", "Cut Length"), 25, 3, 2)
 
-    # ------------------------
-    # LOAD REELS CSV
-    # ------------------------
+    def create_treeview(self, root, columns, height, row, column):
+        tree = ttk.Treeview(root, columns=columns, show="headings", height=height)
+        for col in columns:
+            tree.heading(col, text=col, command=lambda c=col, t=tree: self.sort_treeview(t, c, False))
+            tree.column(col, width=100)
+        tree.grid(row=row, column=column, padx=5, pady=5)
+        return tree
+
+    def sort_treeview(self, tree, col, reverse):
+        data = [(tree.set(k, col), k) for k in tree.get_children("")]
+        try:
+            data.sort(key=lambda t: float(t[0]), reverse=reverse)
+        except ValueError:
+            data.sort(reverse=reverse)
+        for index, (val, k) in enumerate(data):
+            tree.move(k, "", index)
+        tree.heading(col, command=lambda: self.sort_treeview(tree, col, not reverse))
+
     def load_reels(self):
         file_path = filedialog.askopenfilename()
         try:
@@ -99,20 +103,16 @@ class WireOptimizerApp:
                 raise ValueError("Missing required columns in Reels CSV (serial, length, item_number)")
 
             self.reels = df.to_dict(orient="records")
+            for row in self.reels_tree.get_children():
+                self.reels_tree.delete(row)
 
-            self.reels_output.delete(1.0, tk.END)
             for r in self.reels:
-                self.reels_output.insert(
-                    tk.END, f"{r['serial']} - {r['length']} (Item {r['item_number']})\n"
-                )
+                self.reels_tree.insert("", tk.END, values=(r['serial'], r['item_number'], r['length']))
 
             messagebox.showinfo("Success", f"Loaded {len(self.reels)} reels.")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load reels:\n{e}")
 
-    # ------------------------
-    # LOAD CUTS CSV
-    # ------------------------
     def load_cuts(self):
         file_path = filedialog.askopenfilename()
         try:
@@ -122,46 +122,41 @@ class WireOptimizerApp:
                 raise ValueError("Missing required columns in Cuts CSV (length, item_number)")
 
             self.cuts = df.to_dict(orient="records")
+            for row in self.cuts_tree.get_children():
+                self.cuts_tree.delete(row)
 
-            self.cuts_output.delete(1.0, tk.END)
             for c in self.cuts:
-                self.cuts_output.insert(
-                    tk.END, f"{c['length']} (Item {c['item_number']})\n"
-                )
+                self.cuts_tree.insert("", tk.END, values=(c['item_number'], c['length']))
 
             messagebox.showinfo("Success", f"Loaded {len(self.cuts)} cuts.")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load cuts:\n{e}")
 
-    # ------------------------
-    # OPTIMIZE CUTS
-    # ------------------------
     def optimize(self):
         if not self.reels or not self.cuts:
             messagebox.showwarning("Missing Data", "Please load both reels and cuts.")
             return
 
-        # Run allocation function with fresh copy
         result, leftovers = allocate_cuts_by_item_number(self.reels.copy(), self.cuts)
-        self.optimized_result = result  # ✅ Save result for export
+        self.optimized_result = result
+        self.leftovers = leftovers
 
-        self.assign_output.delete(1.0, tk.END)
+        for tree in [self.assignments_tree, self.cuts_tree]:
+            for row in tree.get_children():
+                tree.delete(row)
+
+        applied_cuts = {(reel["item_number"], cut) for reel in result for cut in reel["cuts"]}
+
+        for c in self.cuts:
+            tag = "green" if (c['item_number'], c['length']) in applied_cuts else "red"
+            self.cuts_tree.insert("", tk.END, values=(c['item_number'], c['length']), tags=(tag,))
+        self.cuts_tree.tag_configure("green", background="pale green")
+        self.cuts_tree.tag_configure("red", background="#ff9999")
 
         for reel in result:
-            cuts_str = ", ".join(str(c) for c in reel["cuts"])
-            self.assign_output.insert(
-                tk.END,
-                f"{reel['serial']} (Item {reel['item_number']}) -> [{cuts_str}] | Remaining: {reel['remaining']}\n"
-            )
+            for cut in reel["cuts"]:
+                self.assignments_tree.insert("", tk.END, values=(reel["serial"], reel["item_number"], cut))
 
-        if leftovers:
-            self.assign_output.insert(tk.END, "\nUnassigned Cuts:\n")
-            for cut, item in leftovers:
-                self.assign_output.insert(tk.END, f"{cut} (Item {item})\n")
-
-    # ------------------------
-    # EXPORT RESULTS TO CSV
-    # ------------------------
     def export_assignments(self):
         if not self.optimized_result:
             messagebox.showwarning("No Data", "Run optimization first.")
@@ -175,15 +170,12 @@ class WireOptimizerApp:
             with open(file_path, mode='w', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow(["item_number", "serial", "cut_length"])
-
                 for reel in self.optimized_result:
                     for cut in reel["cuts"]:
                         writer.writerow([reel["item_number"], reel["serial"], cut])
-
             messagebox.showinfo("Success", f"Exported assignments to:\n{file_path}")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to export:\n{e}")
-
 
 # ----------------------------
 # MAIN ENTRY POINT
