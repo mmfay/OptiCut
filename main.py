@@ -1,13 +1,9 @@
-
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import pandas as pd
 from collections import defaultdict
 import csv
 
-# ----------------------------
-# FUNCTION: allocate_cuts_by_item_number
-# ----------------------------
 def allocate_cuts_by_item_number(reels, cuts):
     reels_by_item = defaultdict(list)
     for r in reels:
@@ -43,9 +39,6 @@ def allocate_cuts_by_item_number(reels, cuts):
 
     return all_results, all_unassigned
 
-# ----------------------------
-# CLASS: WireOptimizerApp
-# ----------------------------
 class WireOptimizerApp:
     def __init__(self, root):
         self.root = root
@@ -56,25 +49,26 @@ class WireOptimizerApp:
         self.optimized_result = []
         self.leftovers = []
 
-        # Buttons
-        tk.Button(root, text="Load Reels CSV", command=self.load_reels).grid(row=1, column=0, padx=5, pady=5)
-        tk.Button(root, text="Load Cuts CSV", command=self.load_cuts).grid(row=1, column=1, padx=5, pady=5)
-        tk.Button(root, text="Optimize Cuts", command=self.optimize).grid(row=1, column=2, padx=5, pady=5)
-        tk.Button(root, text="Export Assignments to CSV", command=self.export_assignments).grid(row=0, column=1, padx=5, pady=5)
+        # Top buttons
+        tk.Button(root, text="Load Reels CSV", command=self.load_reels).grid(row=0, column=0, padx=5, pady=5)
+        tk.Button(root, text="Load Cuts CSV", command=self.load_cuts).grid(row=0, column=1, padx=5, pady=5)
 
         # Labels
-        tk.Label(root, text="Reels").grid(row=2, column=0)
-        tk.Label(root, text="Cuts").grid(row=2, column=1)
-        tk.Label(root, text="Assignments").grid(row=2, column=2)
+        tk.Label(root, text="Reels").grid(row=1, column=0)
+        tk.Label(root, text="Cuts").grid(row=1, column=1)
 
         # Reels Treeview
-        self.reels_tree = self.create_treeview(root, ("Serial", "Item Number", "Length"), 25, 3, 0)
+        self.reels_tree = self.create_treeview(root, ("Serial", "Item Number", "Length"), 25, 2, 0)
 
-        # Cuts Treeview
-        self.cuts_tree = self.create_treeview(root, ("Item Number", "Length"), 25, 3, 1)
+        # Cuts Treeview (with Serial column)
+        self.cuts_tree = self.create_treeview(root, ("Item Number", "Length", "Serial"), 25, 2, 1)
 
-        # Assignments Treeview
-        self.assignments_tree = self.create_treeview(root, ("Serial", "Item Number", "Cut Length"), 25, 3, 2)
+        # Button frame beside Cuts grid
+        button_frame = tk.Frame(root)
+        button_frame.grid(row=2, column=2, sticky="n", padx=10)
+
+        tk.Button(button_frame, text="Optimize Cuts", command=self.optimize, width=20).pack(pady=5)
+        tk.Button(button_frame, text="Export Assignments to CSV", command=self.export_assignments, width=20).pack(pady=5)
 
     def create_treeview(self, root, columns, height, row, column):
         tree = ttk.Treeview(root, columns=columns, show="headings", height=height)
@@ -126,7 +120,7 @@ class WireOptimizerApp:
                 self.cuts_tree.delete(row)
 
             for c in self.cuts:
-                self.cuts_tree.insert("", tk.END, values=(c['item_number'], c['length']))
+                self.cuts_tree.insert("", tk.END, values=(c['item_number'], c['length'], ""))
 
             messagebox.showinfo("Success", f"Loaded {len(self.cuts)} cuts.")
         except Exception as e:
@@ -141,21 +135,31 @@ class WireOptimizerApp:
         self.optimized_result = result
         self.leftovers = leftovers
 
-        for tree in [self.assignments_tree, self.cuts_tree]:
-            for row in tree.get_children():
-                tree.delete(row)
+        for row in self.cuts_tree.get_children():
+            self.cuts_tree.delete(row)
 
-        applied_cuts = {(reel["item_number"], cut) for reel in result for cut in reel["cuts"]}
-
-        for c in self.cuts:
-            tag = "green" if (c['item_number'], c['length']) in applied_cuts else "red"
-            self.cuts_tree.insert("", tk.END, values=(c['item_number'], c['length']), tags=(tag,))
-        self.cuts_tree.tag_configure("green", background="pale green")
-        self.cuts_tree.tag_configure("red", background="#ff9999")
-
+        # Map (item_number, cut_length) to serials
+        cut_serial_map = []
         for reel in result:
             for cut in reel["cuts"]:
-                self.assignments_tree.insert("", tk.END, values=(reel["serial"], reel["item_number"], cut))
+                cut_serial_map.append((reel["item_number"], cut, reel["serial"]))
+
+        used_serials = defaultdict(list)
+        for item_num, cut_len, serial in cut_serial_map:
+            used_serials[(item_num, cut_len)].append(serial)
+
+        for c in self.cuts:
+            key = (c['item_number'], c['length'])
+            if key in used_serials and used_serials[key]:
+                serial = used_serials[key].pop(0)
+                tag = "green"
+            else:
+                serial = ""
+                tag = "red"
+            self.cuts_tree.insert("", tk.END, values=(c['item_number'], c['length'], serial), tags=(tag,))
+
+        self.cuts_tree.tag_configure("green", background="pale green")
+        self.cuts_tree.tag_configure("red", background="#ff9999")
 
     def export_assignments(self):
         if not self.optimized_result:
