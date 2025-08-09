@@ -4,12 +4,12 @@ import pandas as pd
 from collections import defaultdict
 import csv
 
-def allocate_cuts_by_item_number(reels, cuts):
-    reels_by_item = defaultdict(list)
-    for r in reels:
+def allocate_cuts_by_item_number(lengths, cuts):
+    lengths_by_item = defaultdict(list)
+    for r in lengths:
         r["remaining"] = r["length"]
         r["cuts"] = []
-        reels_by_item[r["item_number"]].append(r)
+        lengths_by_item[r["item_number"]].append(r)
 
     cuts_by_item = defaultdict(list)
     for c in cuts:
@@ -20,45 +20,45 @@ def allocate_cuts_by_item_number(reels, cuts):
 
     for item_number, item_cuts in cuts_by_item.items():
         sorted_cuts = sorted(item_cuts, reverse=True)
-        item_reels = reels_by_item.get(item_number, [])
+        item_lengths = lengths_by_item.get(item_number, [])
         unassigned = []
 
         for cut in sorted_cuts:
             placed = False
-            for reel in item_reels:
-                if reel["remaining"] >= cut:
-                    reel["cuts"].append(cut)
-                    reel["remaining"] -= cut
+            for length in item_lengths:
+                if length["remaining"] >= cut:
+                    length["cuts"].append(cut)
+                    length["remaining"] -= cut
                     placed = True
                     break
             if not placed:
                 unassigned.append((cut, item_number))
 
-        all_results.extend(item_reels)
+        all_results.extend(item_lengths)
         all_unassigned.extend(unassigned)
 
     return all_results, all_unassigned
 
-class WireOptimizerApp:
+class OptiCutApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Wire Reel Cut Optimizer")
+        self.root.title("OptiCut")
 
-        self.reels = []
+        self.lengths = []
         self.cuts = []
         self.optimized_result = []
         self.leftovers = []
 
         # Top buttons
-        tk.Button(root, text="Load Reels CSV", command=self.load_reels).grid(row=0, column=0, padx=5, pady=5)
+        tk.Button(root, text="Load Lengths CSV", command=self.load_lengths).grid(row=0, column=0, padx=5, pady=5)
         tk.Button(root, text="Load Cuts CSV", command=self.load_cuts).grid(row=0, column=1, padx=5, pady=5)
 
         # Labels
-        tk.Label(root, text="Reels").grid(row=1, column=0)
+        tk.Label(root, text="Lengths").grid(row=1, column=0)
         tk.Label(root, text="Cuts").grid(row=1, column=1)
 
-        # Reels Treeview
-        self.reels_tree = self.create_treeview(root, ("Serial", "Item Number", "Length"), 25, 2, 0)
+        # Lengths Treeview
+        self.lengths_tree = self.create_treeview(root, ("Serial", "Item Number", "Length"), 25, 2, 0)
 
         # Cuts Treeview (with Serial column)
         self.cuts_tree = self.create_treeview(root, ("Item Number", "Length", "Serial"), 25, 2, 1)
@@ -88,24 +88,24 @@ class WireOptimizerApp:
             tree.move(k, "", index)
         tree.heading(col, command=lambda: self.sort_treeview(tree, col, not reverse))
 
-    def load_reels(self):
+    def load_lengths(self):
         file_path = filedialog.askopenfilename()
         try:
             df = pd.read_csv(file_path)
             required_cols = {"serial", "length", "item_number"}
             if not required_cols.issubset(df.columns):
-                raise ValueError("Missing required columns in Reels CSV (serial, length, item_number)")
+                raise ValueError("Missing required columns in Lengths CSV (serial, length, item_number)")
 
-            self.reels = df.to_dict(orient="records")
-            for row in self.reels_tree.get_children():
-                self.reels_tree.delete(row)
+            self.lengths = df.to_dict(orient="records")
+            for row in self.lengths_tree.get_children():
+                self.lengths_tree.delete(row)
 
-            for r in self.reels:
-                self.reels_tree.insert("", tk.END, values=(r['serial'], r['item_number'], r['length']))
+            for r in self.lengths:
+                self.lengths_tree.insert("", tk.END, values=(r['serial'], r['item_number'], r['length']))
 
-            messagebox.showinfo("Success", f"Loaded {len(self.reels)} reels.")
+            messagebox.showinfo("Success", f"Loaded {len(self.lengths)} lengths.")
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to load reels:\n{e}")
+            messagebox.showerror("Error", f"Failed to load lengths:\n{e}")
 
     def load_cuts(self):
         file_path = filedialog.askopenfilename()
@@ -127,11 +127,11 @@ class WireOptimizerApp:
             messagebox.showerror("Error", f"Failed to load cuts:\n{e}")
 
     def optimize(self):
-        if not self.reels or not self.cuts:
-            messagebox.showwarning("Missing Data", "Please load both reels and cuts.")
+        if not self.lengths or not self.cuts:
+            messagebox.showwarning("Missing Data", "Please load both lengths and cuts.")
             return
 
-        result, leftovers = allocate_cuts_by_item_number(self.reels.copy(), self.cuts)
+        result, leftovers = allocate_cuts_by_item_number(self.lengths.copy(), self.cuts)
         self.optimized_result = result
         self.leftovers = leftovers
 
@@ -140,9 +140,9 @@ class WireOptimizerApp:
 
         # Map (item_number, cut_length) to serials
         cut_serial_map = []
-        for reel in result:
-            for cut in reel["cuts"]:
-                cut_serial_map.append((reel["item_number"], cut, reel["serial"]))
+        for length in result:
+            for cut in length["cuts"]:
+                cut_serial_map.append((length["item_number"], cut, length["serial"]))
 
         used_serials = defaultdict(list)
         for item_num, cut_len, serial in cut_serial_map:
@@ -174,9 +174,9 @@ class WireOptimizerApp:
             with open(file_path, mode='w', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow(["item_number", "serial", "cut_length"])
-                for reel in self.optimized_result:
-                    for cut in reel["cuts"]:
-                        writer.writerow([reel["item_number"], reel["serial"], cut])
+                for length in self.optimized_result:
+                    for cut in length["cuts"]:
+                        writer.writerow([length["item_number"], length["serial"], cut])
             messagebox.showinfo("Success", f"Exported assignments to:\n{file_path}")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to export:\n{e}")
@@ -186,5 +186,5 @@ class WireOptimizerApp:
 # ----------------------------
 if __name__ == "__main__":
     root = tk.Tk()
-    app = WireOptimizerApp(root)
+    app = OptiCutApp(root)
     root.mainloop()
